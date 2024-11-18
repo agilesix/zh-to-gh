@@ -51,7 +51,7 @@ func main() {
 	}
 	gh := github.NewGitHubClient(token)
 
-	// Channels to collect the results and errors
+	// Create a wait group and channel to synchronize goroutines
 	var wg sync.WaitGroup
 	resultChan := make(chan github.AddSubIssueResults, len(issuesMap))
 
