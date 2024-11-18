@@ -14,7 +14,7 @@ A CLI tool to migrate ZenHub issue hierarchies to GitHub sub-issues.
 ### Installation
 
 1. Clone the repo
-2. Change directory into the repo: `cd zhtogh`
+2. Change directory into the repo: `cd zh-to-gh`
 3. Set your GitHub access token as an environment variable: `export GITHUB_TOKEN=...`
 4. Build the target: `go build -o target/zhtogh ./cmd`
 5. Add the target to your path: `export $PATH:./target`
