@@ -9,6 +9,7 @@ A CLI tool to migrate ZenHub issue hierarchies to GitHub sub-issues.
 - Golang, version 1.22.3
 - A GitHub [Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) with the following permissions:
   - `repo`
+- Belonging to a GitHub organization that has access to the sub-issues private beta
 
 ### Installation
 
@@ -49,7 +50,7 @@ Added:	2
 Failed:	0
 ```
 
-> [!NOTE] Important
+> [!NOTE]
 > You must have write permissions on the repo the issues belong to 
 > and the organization that owns the repo must be participating in the 
 > [sub-issues beta](https://github.com/orgs/community/discussions/131957)
