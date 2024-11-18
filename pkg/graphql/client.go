@@ -7,26 +7,24 @@ import (
 	"net/http"
 )
 
-// Client is a struct that represents the HTTP client used to interact with the GitHub GraphQL API.
 type Client struct {
 	URL     string
-	headers map[string]string
+	headers map[string][]string
 }
 
 // NewClient creates a new GitHub GraphQL API client with the provided token.
 func NewClient(url, token string) *Client {
-	// Create a new client with that token
 	return &Client{
 		URL: url,
-		headers: map[string]string{
-			"Authorization": "Bearer " + token,
-			"Content-Type":  "application/json",
+		headers: map[string][]string{
+			"Authorization": {"Bearer " + token},
+			"Content-Type":  {"application/json"},
 		},
 	}
 }
 
 func (c *Client) WithDefaultHeader(key, val string) *Client {
-	c.headers[key] = val
+	c.headers[key] = append(c.headers[key], val)
 	return c
 }
 
@@ -38,9 +36,11 @@ func (c *Client) Post(requestBody []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
-	// Set headers for the request
-	for key, val := range c.headers {
-		req.Header.Set(key, val)
+	// Add headers for the request
+	for key, values := range c.headers {
+		for _, val := range values {
+			req.Header.Add(key, val)
+		}
 	}
 
 	// Create a new HTTP client and send the request

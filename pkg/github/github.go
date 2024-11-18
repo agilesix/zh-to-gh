@@ -2,7 +2,7 @@ package github
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/widal001/zhtogh/pkg/graphql"
 )
@@ -34,7 +34,7 @@ func (c GitHubClient) AddSubIssuesByUrl(parent string, children []string) {
 	// Get the node ID for parent issue
 	parentId, err := c.GetIssueIdByURL(parent)
 	if err != nil {
-		log.Printf("Error getting node ID for parent issue %s: %s", parent, err)
+		slog.Error("Error getting node ID for parent issue", "parent", parent, "error", err)
 		return // exit early
 	}
 
@@ -43,16 +43,20 @@ func (c GitHubClient) AddSubIssuesByUrl(parent string, children []string) {
 		// Get the node ID for the current child
 		childId, err := c.GetIssueIdByURL(child)
 		if err != nil {
-			log.Printf("Error getting node ID for parent issue %s: %s", parent, err)
+			slog.Error("Error getting node ID for child issue", "child", child, "error", err)
+			continue // move to the next child
 		}
+
 		// Add the child issue to the parent
-		err = c.AddSubIssueById(parentId, childId)
-		if err != nil {
-			log.Printf("Error adding sub-issue %s to issue %s: %s", parent, child, err)
+		addErr := c.AddSubIssueById(parentId, childId)
+		if addErr != nil {
+			slog.Error("Error adding sub-issue to parent", "parent", parent, "child", child, "error", addErr)
+			continue
 		}
+
+		slog.Info("Successfully added sub-issue", "parent", parent, "child", child)
 
 	}
-
 }
 
 // =========================================================
@@ -69,8 +73,10 @@ func (c GitHubClient) GetIssueIdByURL(url string) (IssueId, error) {
 	// Define the query string with `$url` as an input variable
 	queryStr := `
 query ($url: URI!) {
-  resource(url: $issueUrl) {
-    ... on Issue { id }
+  resource(url: $url) {
+    ... on Issue { 
+	  id
+	}
   }
 }`
 	// Map the input variable to its value

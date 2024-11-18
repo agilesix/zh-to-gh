@@ -33,8 +33,7 @@ func (q *Query) Post(client Client, response interface{}) error {
 	// Unmarshal the JSON response into the struct
 	err = json.Unmarshal([]byte(responseBody), &response)
 	if err != nil {
-		fmt.Println("Error unmarshalling JSON:", err)
-		return err
+		return fmt.Errorf("error unmarshalling JSON: %v", err)
 	}
 	return nil
 }
