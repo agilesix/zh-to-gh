@@ -30,29 +30,46 @@ func NewGitHubClient(token string) GitHubClient {
 // Add sub-issues by their URL
 // =========================================================
 
+type AddSubIssueResults struct {
+	Parent string
+	Added  []string
+	Errors map[string]error
+}
+
 // Add multiple sub-issues to parent issue using their URLs
-func (c GitHubClient) AddSubIssuesByUrl(parent string, children []string) {
+func (c GitHubClient) AddSubIssuesByUrl(parent string, children []string) AddSubIssueResults {
+	// Instantiate the results
+	results := AddSubIssueResults{
+		Parent: parent,
+		Errors: make(map[string]error),
+	}
+
 	// Get the node ID for parent issue
 	parentId, err := c.GetIssueIdByURL(parent)
 	if err != nil {
 		slog.Error("Error getting node ID for parent issue", "parent", parent, "error", err)
-		return // exit early
+		return results // exit early
 	}
 
+	// Get the node IDs for each child concurrently
 	childIds := c.BatchGetIssueIds(children)
 
 	// Add each child issue to the parent
 	for _, child := range childIds {
+
 		// Add the child issue to the parent
-		addErr := c.AddSubIssueById(parentId, child.IssueID)
-		if addErr != nil {
-			slog.Error("Error adding sub-issue to parent", "parent", parent, "childId", child.URL, "error", addErr)
+		err := c.AddSubIssueById(parentId, child.IssueID)
+		// Capture failure
+		if err != nil {
+			results.Errors[child.URL] = err
 			continue
 		}
-
-		slog.Info("Successfully added sub-issue", "parent", parent, "childId", child.URL)
-
+		// Capture success
+		results.Added = append(results.Added, child.URL)
 	}
+
+	//  Return the results
+	return results
 }
 
 // =========================================================
@@ -65,7 +82,9 @@ type IssueMapping struct {
 }
 
 func (c *GitHubClient) BatchGetIssueIds(urls []string) []IssueMapping {
-	var wg sync.WaitGroup // WaitGroup to manage goroutines
+
+	// Create wait group and channels to synchronize goroutines
+	var wg sync.WaitGroup
 	issueIdChan := make(chan IssueMapping, len(urls))
 	errorsChan := make(chan error, len(urls))
 
@@ -94,7 +113,7 @@ func (c *GitHubClient) BatchGetIssueIds(urls []string) []IssueMapping {
 	// Collect errors and issue mappings
 	var issues []IssueMapping
 	for err := range errorsChan {
-		slog.Error("Failed to get ID", "error", err)
+		slog.Debug("Failed to get ID", "error", err)
 	}
 	for issue := range issueIdChan {
 		issues = append(issues, issue)

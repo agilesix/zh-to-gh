@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 
 	"log/slog"
 
@@ -50,11 +51,49 @@ func main() {
 	}
 	gh := github.NewGitHubClient(token)
 
-	// Process each parent and its children
+	// Channels to collect the results and errors
+	var wg sync.WaitGroup
+	resultChan := make(chan github.AddSubIssueResults, len(issuesMap))
+
+	// Process each parent and its children in a goroutine
 	for parent, children := range issuesMap {
-		slog.Info("Processing parent issue", "parent", parent)
-		gh.AddSubIssuesByUrl(parent, children)
+		wg.Add(1)
+
+		// Launch a goroutine for each parent-child migration
+		go func(parent string, children []string) {
+			defer wg.Done()
+
+			// Log start of parent issue
+			fmt.Println("- Adding sub-issues for:", parent)
+
+			// Perform the migration and collect the result
+			resultChan <- gh.AddSubIssuesByUrl(parent, children)
+
+		}(parent, children) // Pass the parent and children to the goroutine
 	}
 
-	slog.Info("Finished processing all issues")
+	// Close the channels when all goroutines are done
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect the results
+	for result := range resultChan {
+		// Log the parent
+		fmt.Printf("\n\n### Results for parent issue: %s\n\n", result.Parent)
+
+		// Log the successes
+		fmt.Printf("Added:\t%d\n", len(result.Added))
+		for _, url := range result.Added {
+			fmt.Println("- ", url)
+		}
+
+		// Log the failures
+		fmt.Printf("Failed:\t%d\n", len(result.Errors))
+		for url, err := range result.Errors {
+			fmt.Printf("- %s: %s\n", url, err)
+		}
+
+	}
 }
