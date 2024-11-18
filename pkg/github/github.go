@@ -3,6 +3,7 @@ package github
 import (
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/widal001/zhtogh/pkg/graphql"
 )
@@ -38,25 +39,69 @@ func (c GitHubClient) AddSubIssuesByUrl(parent string, children []string) {
 		return // exit early
 	}
 
-	// Add each child issue to the parent
-	for _, child := range children {
-		// Get the node ID for the current child
-		childId, err := c.GetIssueIdByURL(child)
-		if err != nil {
-			slog.Error("Error getting node ID for child issue", "child", child, "error", err)
-			continue // move to the next child
-		}
+	childIds := c.BatchGetIssueIds(children)
 
+	// Add each child issue to the parent
+	for _, child := range childIds {
 		// Add the child issue to the parent
-		addErr := c.AddSubIssueById(parentId, childId)
+		addErr := c.AddSubIssueById(parentId, child.IssueID)
 		if addErr != nil {
-			slog.Error("Error adding sub-issue to parent", "parent", parent, "child", child, "error", addErr)
+			slog.Error("Error adding sub-issue to parent", "parent", parent, "childId", child.URL, "error", addErr)
 			continue
 		}
 
-		slog.Info("Successfully added sub-issue", "parent", parent, "child", child)
+		slog.Info("Successfully added sub-issue", "parent", parent, "childId", child.URL)
 
 	}
+}
+
+// =========================================================
+// Get the ID for multiple issues by their URLs
+// =========================================================
+
+type IssueMapping struct {
+	URL     string
+	IssueID IssueId
+}
+
+func (c *GitHubClient) BatchGetIssueIds(urls []string) []IssueMapping {
+	var wg sync.WaitGroup // WaitGroup to manage goroutines
+	issueIdChan := make(chan IssueMapping, len(urls))
+	errorsChan := make(chan error, len(urls))
+
+	// Launch a goroutine for each child
+	for _, url := range urls {
+		wg.Add(1)
+		go func(child string) {
+			defer wg.Done()
+			// Get the node ID for the current child
+			id, err := c.GetIssueIdByURL(url)
+			if err != nil {
+				errorsChan <- fmt.Errorf("failed to get ID for %s: %w", url, err)
+				return
+			}
+			issueIdChan <- IssueMapping{URL: url, IssueID: id}
+		}(url) // Pass the `child` variable to the goroutine
+	}
+
+	// Close channels when all goroutines have finished
+	go func() {
+		wg.Wait()
+		close(errorsChan)
+		close(issueIdChan)
+	}()
+
+	// Collect errors and issue mappings
+	var issues []IssueMapping
+	for err := range errorsChan {
+		slog.Error("Failed to get ID", "error", err)
+	}
+	for issue := range issueIdChan {
+		issues = append(issues, issue)
+	}
+
+	// Return the issue mappings
+	return issues
 }
 
 // =========================================================
@@ -69,7 +114,7 @@ type IssueId string
 //
 // In order to add a sub-issue to another issue, you need the node ID for both issues.
 // Node IDs for issues are an 18-character string prefixed with `I_`, e.g. `I_kwDOMzlMsM6XpAXQ`
-func (c GitHubClient) GetIssueIdByURL(url string) (IssueId, error) {
+func (c *GitHubClient) GetIssueIdByURL(url string) (IssueId, error) {
 	// Define the query string with `$url` as an input variable
 	queryStr := `
 query ($url: URI!) {
